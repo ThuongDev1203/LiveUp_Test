@@ -5,41 +5,36 @@ public class NoteManager : MonoBehaviour
 {
     public static NoteManager Instance;
 
-    Dictionary<int, List<Note>> laneNotes = new Dictionary<int, List<Note>>();
+    private List<Note> allNotes = new List<Note>();
 
     void Awake()
     {
         Instance = this;
-
-        for (int i = 0; i < 4; i++)
-            laneNotes[i] = new List<Note>();
     }
 
-    public void Register(Note note, int lane)
+    public void Register(Note note)
     {
-        laneNotes[lane].Add(note);
+        allNotes.Add(note);
     }
 
-    public void Unregister(Note note, int lane)
+    public void Unregister(Note note)
     {
-        laneNotes[lane].Remove(note);
+        allNotes.Remove(note);
     }
 
-    // 🔥 LẤY NOTE GẦN HIT LINE NHẤT
-    public Note GetBottomNote(int lane)
+    // 🔥 NOTE SỚM NHẤT (GLOBAL)
+    public Note GetNextNote()
     {
-        if (laneNotes[lane].Count == 0) return null;
+        if (allNotes.Count == 0) return null;
 
         Note best = null;
-        float lowestY = float.MaxValue;
+        float earliest = float.MaxValue;
 
-        foreach (var n in laneNotes[lane])
+        foreach (var n in allNotes)
         {
-            float y = n.transform.position.y;
-
-            if (y < lowestY)
+            if (n.TargetTime < earliest)
             {
-                lowestY = y;
+                earliest = n.TargetTime;
                 best = n;
             }
         }

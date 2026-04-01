@@ -9,6 +9,8 @@ public class AudioSync : MonoBehaviour
 
     double dspStartTime;
 
+    public bool IsPlaying { get; private set; } = false; // ✅ thêm dòng này
+
     void Awake()
     {
         Instance = this;
@@ -16,16 +18,26 @@ public class AudioSync : MonoBehaviour
 
     void Start()
     {
-        // delay để đảm bảo sync đúng (TRÁNH spawn 1 cục)
         dspStartTime = AudioSettings.dspTime + 0.5;
         audioSource.PlayScheduled(dspStartTime);
+
+        Invoke(nameof(SetPlaying), 0.5f); // ✅ bật IsPlaying sau khi nhạc bắt đầu
+    }
+
+    void SetPlaying()
+    {
+        IsPlaying = true;
     }
 
     public float SongTime
     {
         get
         {
-            return (float)(AudioSettings.dspTime - dspStartTime) + offset;
+            double time = AudioSettings.dspTime - dspStartTime;
+
+            if (time < 0) return -1f; // 🚫 chưa tới giờ thì return âm
+
+            return (float)time + offset;
         }
     }
 }

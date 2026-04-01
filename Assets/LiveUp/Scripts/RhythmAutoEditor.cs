@@ -20,8 +20,8 @@ public class RhythmFinalTool : EditorWindow
 
     [Header("Gameplay")]
     int laneCount = 4;
-    float minNoteGap = 0.25f; // 🔥 chống note dính
-    float randomSkipChance = 0.2f; // 🔥 tạo pattern tự nhiên
+    float minNoteGap = 0.25f;
+    float randomSkipChance = 0.2f;
 
     List<float> peaks = new List<float>();
     List<NoteData> notes = new List<NoteData>();
