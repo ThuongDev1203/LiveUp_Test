@@ -1,103 +1,87 @@
-// IMPROVED RHYTHM AUTO GENERATOR (BETTER SYNC)
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System.IO;
 
-public class RhythmAutoEditor : EditorWindow
+public class RhythmFinalTool : EditorWindow
 {
     AudioClip audioClip;
-    AudioSource previewSource;
-
-    float currentTime;
-    bool isPlaying;
 
     float duration = 30f;
+
+    [Header("Timing")]
+    bool autoDetectBPM = true;
+    float bpm = 120f;
+    float offset = 0.08f;
+    int subdivision = 2;
+
+    [Header("Detect")]
+    float sensitivity = 1.2f;
+
+    [Header("Gameplay")]
     int laneCount = 4;
+    float minNoteGap = 0.25f; // 🔥 chống note dính
+    float randomSkipChance = 0.2f; // 🔥 tạo pattern tự nhiên
 
-    float sensitivity = 1.3f;
-
+    List<float> peaks = new List<float>();
     List<NoteData> notes = new List<NoteData>();
 
-    [MenuItem("Tools/Rhythm Auto Tool PRO")]
-    public static void ShowWindow()
+    [MenuItem("Tools/Rhythm FINAL")]
+    public static void Open()
     {
-        GetWindow<RhythmAutoEditor>("Rhythm Auto Tool PRO");
-    }
-
-    void OnEnable()
-    {
-        var go = new GameObject("AudioPreview");
-        go.hideFlags = HideFlags.HideAndDontSave;
-        previewSource = go.AddComponent<AudioSource>();
-    }
-
-    void OnDisable()
-    {
-        if (previewSource != null)
-            DestroyImmediate(previewSource.gameObject);
+        GetWindow<RhythmFinalTool>("Rhythm FINAL");
     }
 
     void OnGUI()
     {
-        GUILayout.Label("Audio", EditorStyles.boldLabel);
-
-        audioClip = (AudioClip)EditorGUILayout.ObjectField(audioClip, typeof(AudioClip), false);
-
-        GUILayout.BeginHorizontal();
-        if (GUILayout.Button("Play")) Play();
-        if (GUILayout.Button("Stop")) Stop();
-        GUILayout.EndHorizontal();
-
+        audioClip = (AudioClip)EditorGUILayout.ObjectField("Audio", audioClip, typeof(AudioClip), false);
         duration = EditorGUILayout.FloatField("Duration", duration);
-        sensitivity = EditorGUILayout.Slider("Sensitivity", sensitivity, 0.5f, 2f);
 
-        GUILayout.Label($"Time: {currentTime:F2}");
+        GUILayout.Space(10);
+        GUILayout.Label("Timing", EditorStyles.boldLabel);
 
-        if (GUILayout.Button("🔥 Auto Generate PRO"))
-        {
-            AutoGenerate();
-        }
+        autoDetectBPM = EditorGUILayout.Toggle("Auto BPM", autoDetectBPM);
+
+        if (!autoDetectBPM)
+            bpm = EditorGUILayout.FloatField("Manual BPM", bpm);
+
+        offset = EditorGUILayout.Slider("Offset", offset, -0.2f, 0.2f);
+
+        subdivision = EditorGUILayout.IntPopup("Subdivision",
+            subdivision,
+            new string[] { "1/4", "1/8", "1/16" },
+            new int[] { 1, 2, 4 });
+
+        GUILayout.Space(10);
+
+        sensitivity = EditorGUILayout.Slider("Sensitivity", sensitivity, 0.8f, 2f);
+
+        GUILayout.Space(10);
+
+        GUILayout.Label("Gameplay", EditorStyles.boldLabel);
+        laneCount = EditorGUILayout.IntSlider("Lane Count", laneCount, 2, 6);
+        minNoteGap = EditorGUILayout.Slider("Min Gap", minNoteGap, 0.1f, 0.5f);
+        randomSkipChance = EditorGUILayout.Slider("Random Skip", randomSkipChance, 0f, 0.5f);
+
+        GUILayout.Space(10);
+
+        if (GUILayout.Button("1. Detect Beat"))
+            DetectPro();
+
+        if (GUILayout.Button("2. Generate Notes"))
+            Generate();
 
         if (GUILayout.Button("Export JSON"))
-        {
             Export();
-        }
 
-        DrawTimeline();
-
-        if (isPlaying)
-            Repaint();
+        GUILayout.Label($"Peaks: {peaks.Count}");
+        GUILayout.Label($"Notes: {notes.Count}");
     }
 
-    void Update()
+    // ================= PRO DETECT =================
+    void DetectPro()
     {
-        if (isPlaying)
-            currentTime = previewSource.time;
-    }
-
-    void Play()
-    {
-        if (audioClip == null) return;
-
-        previewSource.clip = audioClip;
-        previewSource.time = currentTime;
-        previewSource.Play();
-
-        isPlaying = true;
-    }
-
-    void Stop()
-    {
-        previewSource.Stop();
-        isPlaying = false;
-    }
-
-    // ================= AUTO GENERATE =================
-
-    void AutoGenerate()
-    {
-        notes.Clear();
+        peaks.Clear();
 
         if (audioClip == null) return;
 
@@ -105,85 +89,116 @@ public class RhythmAutoEditor : EditorWindow
         audioClip.GetData(samples, 0);
 
         int sampleRate = audioClip.frequency;
+        int window = 1024;
 
-        int frameSize = 1024;
-        int hopSize = 512;
+        List<float> lowFlux = new List<float>();
+        List<float> midFlux = new List<float>();
 
-        List<float> energy = new List<float>();
+        float prevLow = 0f;
+        float prevMid = 0f;
 
-        // ===== 1. RMS =====
-        for (int i = 0; i < samples.Length - frameSize; i += hopSize)
+        for (int i = 0; i < samples.Length - window; i += window)
         {
-            float sum = 0f;
-            for (int j = 0; j < frameSize; j++)
+            float low = 0f;
+            float mid = 0f;
+
+            for (int j = 0; j < window; j++)
             {
                 float s = samples[i + j];
-                sum += s * s;
+
+                float abs = Mathf.Abs(s);
+
+                // fake band split (approximation)
+                low += abs * (j < window * 0.3f ? 1f : 0.2f);
+                mid += abs * (j >= window * 0.3f && j < window * 0.8f ? 1f : 0.2f);
             }
-            energy.Add(Mathf.Sqrt(sum / frameSize));
+
+            low /= window;
+            mid /= window;
+
+            float lowDiff = Mathf.Max(0, low - prevLow);
+            float midDiff = Mathf.Max(0, mid - prevMid);
+
+            lowFlux.Add(lowDiff);
+            midFlux.Add(midDiff);
+
+            prevLow = low;
+            prevMid = mid;
         }
 
-        // ===== 2. SPECTRAL FLUX (DIFFERENCE) =====
-        List<float> flux = new List<float>();
-        flux.Add(0);
+        // ===== chọn mode =====
+        float avgLow = Average(lowFlux);
+        float avgMid = Average(midFlux);
 
-        for (int i = 1; i < energy.Count; i++)
+        bool useLow = avgLow > avgMid; // 🔥 auto chọn beat hay vocal
+
+        List<float> chosen = useLow ? lowFlux : midFlux;
+
+        for (int i = 1; i < chosen.Count; i++)
         {
-            float value = Mathf.Max(0, energy[i] - energy[i - 1]);
-            flux.Add(value);
-        }
-
-        // ===== 3. PEAK DETECT =====
-        List<float> rawBeats = new List<float>();
-        int window = 8;
-
-        for (int i = window; i < flux.Count - 1; i++)
-        {
-            float avg = 0f;
-            for (int j = i - window; j < i; j++) avg += flux[j];
-            avg /= window;
-
-            if (flux[i] > flux[i - 1] && flux[i] > flux[i + 1] && flux[i] > avg * sensitivity)
+            if (chosen[i] > sensitivity * Average(chosen))
             {
-                float time = (float)(i * hopSize) / sampleRate;
-                rawBeats.Add(time);
+                float time = (float)(i * window) / sampleRate;
+
+                // chống spam
+                if (peaks.Count > 0 && time - peaks[peaks.Count - 1] < 0.12f)
+                    continue;
+
+                peaks.Add(time);
             }
         }
 
-        if (rawBeats.Count < 5)
+        if (autoDetectBPM && peaks.Count > 10)
         {
-            Debug.LogWarning("Not enough beats!");
-            return;
+            bpm = EstimateBPM(peaks);
+            bpm = Mathf.Clamp(bpm, 60f, 180f);
         }
 
-        // ===== 4. BPM =====
-        float bpm = EstimateBPM(rawBeats);
-        float interval = 60f / bpm;
+        Debug.Log($"Detected PRO Peaks: {peaks.Count} | Mode: {(useLow ? "BEAT" : "VOCAL")} | BPM: {bpm}");
+    }
 
-        Debug.Log("BPM: " + bpm);
+    float Average(List<float> list)
+    {
+        float sum = 0;
+        foreach (var v in list) sum += v;
+        return sum / list.Count;
+    }
 
-        // ===== 5. QUANTIZE SOFT =====
-        List<float> beats = new List<float>();
-        float last = -999;
+    // ================= GENERATE =================
+    void Generate()
+    {
+        notes.Clear();
 
-        foreach (var t in rawBeats)
+        float beat = 60f / bpm;
+        float step = beat / subdivision;
+
+        int lastLane = -1;
+        float lastTime = -999f;
+
+        HashSet<float> used = new HashSet<float>();
+
+        foreach (var peak in peaks)
         {
-            float snap = Mathf.Round(t / interval) * interval;
-            float final = Mathf.Lerp(t, snap, 0.6f);
+            if (Random.value < randomSkipChance) continue;
 
-            if (final - last > 0.15f)
+            float t = Mathf.Round(peak / step) * step + offset;
+
+            if (t > duration) continue;
+            if (used.Contains(t)) continue;
+            if (t - lastTime < minNoteGap) continue;
+
+            int lane = Random.Range(0, laneCount);
+
+            int safe = 0;
+            while (lane == lastLane && safe < 10)
             {
-                beats.Add(final);
-                last = final;
+                lane = Random.Range(0, laneCount);
+                safe++;
             }
-        }
 
-        // ===== 6. GENERATE NOTES =====
-        int lane = 0;
-
-        foreach (var t in beats)
-        {
-            lane = (lane + Random.Range(1, laneCount)) % laneCount;
+            used.Add(t);
+            lastLane = lane;
+            lastTime = t;
 
             notes.Add(new NoteData
             {
@@ -195,12 +210,13 @@ public class RhythmAutoEditor : EditorWindow
 
         notes.Sort((a, b) => a.time.CompareTo(b.time));
 
-        Debug.Log("Generated: " + notes.Count);
+        Debug.Log("Generated Notes: " + notes.Count);
     }
 
+    // ================= BPM =================
     float EstimateBPM(List<float> beats)
     {
-        Dictionary<int, int> histogram = new Dictionary<int, int>();
+        Dictionary<int, int> hist = new Dictionary<int, int>();
 
         for (int i = 1; i < beats.Count; i++)
         {
@@ -208,14 +224,15 @@ public class RhythmAutoEditor : EditorWindow
             if (diff < 0.1f || diff > 1f) continue;
 
             int key = Mathf.RoundToInt(diff * 100);
-            if (!histogram.ContainsKey(key)) histogram[key] = 0;
-            histogram[key]++;
+
+            if (!hist.ContainsKey(key)) hist[key] = 0;
+            hist[key]++;
         }
 
         int bestKey = 0;
         int bestCount = 0;
 
-        foreach (var kv in histogram)
+        foreach (var kv in hist)
         {
             if (kv.Value > bestCount)
             {
@@ -225,42 +242,30 @@ public class RhythmAutoEditor : EditorWindow
         }
 
         float interval = bestKey / 100f;
-        float bpm = 60f / interval;
-
-        while (bpm < 80) bpm *= 2;
-        while (bpm > 180) bpm /= 2;
-
-        return bpm;
+        return 60f / interval;
     }
 
-    void DrawTimeline()
-    {
-        Rect rect = GUILayoutUtility.GetRect(800, 200);
-        GUI.Box(rect, "");
-
-        float laneWidth = rect.width / laneCount;
-
-        foreach (var note in notes)
-        {
-            float x = rect.x + note.lane * laneWidth;
-            float y = rect.y + (note.time / duration) * rect.height;
-
-            EditorGUI.DrawRect(new Rect(x + 5, y, laneWidth - 10, 8), Color.green);
-        }
-
-        float playY = rect.y + (currentTime / duration) * rect.height;
-        EditorGUI.DrawRect(new Rect(rect.x, playY, rect.width, 2), Color.red);
-    }
-
+    // ================= EXPORT =================
     void Export()
     {
+        if (notes.Count == 0)
+        {
+            Debug.LogError("No notes!");
+            return;
+        }
+
         SongData song = new SongData();
-        song.offset = 0f;
+        song.offset = offset;
         song.notes = notes;
 
         string json = JsonUtility.ToJson(song, true);
 
-        string path = EditorUtility.SaveFilePanel("Save JSON", "", "notes.json", "json");
+        string path = EditorUtility.SaveFilePanel(
+            "Save JSON",
+            Application.dataPath,
+            "notes.json",
+            "json"
+        );
 
         if (!string.IsNullOrEmpty(path))
         {

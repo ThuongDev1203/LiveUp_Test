@@ -8,17 +8,11 @@ public class NotePool : MonoBehaviour
     public GameObject notePrefab;
     public int initialSize = 50;
 
-    private Queue<GameObject> pool = new Queue<GameObject>();
+    Queue<GameObject> pool = new Queue<GameObject>();
 
     void Awake()
     {
         Instance = this;
-
-        if (notePrefab == null)
-        {
-            Debug.LogError("❌ NotePool: notePrefab NOT assigned!");
-            return;
-        }
 
         for (int i = 0; i < initialSize; i++)
         {
@@ -48,7 +42,7 @@ public class NotePool : MonoBehaviour
     public void Return(GameObject obj)
     {
         obj.SetActive(false);
-        obj.transform.SetParent(transform); // reset parent
+        obj.transform.SetParent(transform);
         pool.Enqueue(obj);
     }
 }

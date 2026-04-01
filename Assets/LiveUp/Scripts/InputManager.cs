@@ -25,8 +25,7 @@ public class InputManager : MonoBehaviour
             Note note = r.gameObject.GetComponent<Note>();
             if (note != null)
             {
-                //note.TryHit();
-                note.Hit();
+                note.TryHit();
                 return;
             }
         }

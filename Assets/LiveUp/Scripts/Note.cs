@@ -2,57 +2,71 @@ using UnityEngine;
 
 public class Note : MonoBehaviour
 {
-    public int lane;
-
+    float speed;
     float targetTime;
-    float spawnY;
-    float hitY;
-    float travelTime;
 
-    bool isHit = false;
+    bool isHit;
 
     RectTransform rt;
+    RectTransform hitLine;
+
+    int lane;
+
+    const float PERFECT = 0.08f;
+    const float GOOD = 0.15f;
 
     void Awake()
     {
         rt = GetComponent<RectTransform>();
     }
 
-    public void Init(float time, float sY, float hY, float tTime, int laneIndex)
+    public void Init(float s, float time, RectTransform line, int laneIndex)
     {
+        speed = s;
         targetTime = time;
-        spawnY = sY;
-        hitY = hY;
-        travelTime = tTime;
+        hitLine = line;
         lane = laneIndex;
-
         isHit = false;
+
+        NoteManager.Instance.Register(this, lane);
     }
 
     void Update()
     {
         if (isHit) return;
 
-        float current = AudioSync.Instance.SongTime;
+        rt.anchoredPosition += Vector2.down * speed * Time.deltaTime;
 
-        float t = 1f - (targetTime - current) / travelTime;
-        t = Mathf.Clamp01(t);
-
-        float y = Mathf.Lerp(spawnY, hitY, t);
-        rt.anchoredPosition = new Vector2(0, y);
-
-        // miss theo time
-        if (current > targetTime + 0.2f)
+        if (rt.position.y < hitLine.position.y)
         {
             Miss();
         }
     }
 
-    public void Hit()
+    public void TryHit()
     {
         if (isHit) return;
 
+        // 🔥 CHỈ CHO HIT NOTE DƯỚI CÙNG
+        var bottom = NoteManager.Instance.GetBottomNote(lane);
+        if (bottom != this) return;
+
+        float current = AudioSync.Instance.SongTime;
+        float delta = Mathf.Abs(current - targetTime);
+
+        if (delta <= PERFECT)
+            Hit(150);
+        else if (delta <= GOOD)
+            Hit(100);
+        else
+            Miss();
+    }
+
+    void Hit(int score)
+    {
         isHit = true;
+
+        NoteManager.Instance.Unregister(this, lane);
         NotePool.Instance.Return(gameObject);
     }
 
@@ -61,8 +75,8 @@ public class Note : MonoBehaviour
         if (isHit) return;
 
         isHit = true;
-        Debug.Log("Miss");
 
+        NoteManager.Instance.Unregister(this, lane);
         NotePool.Instance.Return(gameObject);
     }
 }
