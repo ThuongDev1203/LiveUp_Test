@@ -49,7 +49,7 @@ public class Note : MonoBehaviour
         float y = hitLineY + timeToHit * speed;
         rt.anchoredPosition = new Vector2(0, y);
 
-        // MISS
+        // 🔥 MISS tự động
         if (current - targetTime > 0.3f)
         {
             Miss();
@@ -60,33 +60,30 @@ public class Note : MonoBehaviour
     {
         if (isHit) return;
 
-        // 🔥 1. check đúng lane (note dưới cùng)
-        var bottom = NoteManager.Instance.GetBottomNote(laneIndex);
-        if (bottom != this)
+        // 🔥 CHẶN nếu đang có miss chưa xử lý
+        if (!NoteManager.Instance.CanHit())
         {
-            Debug.Log("❌ KHÔNG PHẢI NOTE DƯỚI CÙNG LANE");
+            Debug.Log("⛔ ĐANG CÓ MISS → KHÔNG CHO HIT");
             return;
         }
 
-        // 🔥 2. check thứ tự global
+        var bottom = NoteManager.Instance.GetBottomNote(laneIndex);
+        if (bottom != this) return;
+
         var globalFirst = NoteManager.Instance.GetFirstGlobal();
-        if (globalFirst != this)
-        {
-            Debug.Log("❌ CHƯA ĐẾN LƯỢT NOTE NÀY");
-            return;
-        }
+        if (globalFirst != this) return;
 
         float current = AudioSync.Instance.SongTime;
         float delta = Mathf.Abs(current - targetTime);
 
         if (delta <= 0.25f)
         {
-            Debug.Log("✅ HIT ĐÚNG THỨ TỰ");
+            Debug.Log("✅ HIT");
             Hit();
         }
         else
         {
-            Debug.Log("💀 MISS");
+            Debug.Log("💀 MISS (tap sai)");
             Miss();
         }
     }
@@ -107,8 +104,16 @@ public class Note : MonoBehaviour
 
         isHit = true;
 
+        Debug.Log("💀 MISS");
+
+        // 🔥 báo manager là đang miss
+        NoteManager.Instance.OnMiss();
+
         NoteManager.Instance.Unregister(this);
         NotePool.Instance.Return(gameObject);
+
+        // 🔥 clear miss ngay sau khi remove
+        NoteManager.Instance.ClearMiss();
     }
 
     void OnDisable()
