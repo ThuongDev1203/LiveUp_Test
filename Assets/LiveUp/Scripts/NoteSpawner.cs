@@ -1,28 +1,18 @@
-using System.Collections.Generic;
 using UnityEngine;
+using System.Collections.Generic;
 
 public class NoteSpawner : MonoBehaviour
 {
     public RectTransform[] lanes;
     public RectTransform hitLine;
 
-    public float baseSpeed = 800f;       // 👉 dùng để tính độ dài HOLD (CỐ ĐỊNH)
-    public float noteSpeed = 800f;       // 👉 speed thật đang chạy
-    public float noteHeight = 350f;
-
-    public float speedIncreaseRate = 20f;
-    public float maxSpeed = 1400f;
+    public float noteSpeed = 800f;
+    public float spawnOffsetY = 200f;
 
     SongData song;
     int index = 0;
 
     float travelTime;
-
-    Dictionary<int, float> lastSpawnTime = new Dictionary<int, float>();
-    float lastSpawnGlobalTime = -999f;
-
-    const float MIN_LANE_GAP = 0.18f;
-    const float MIN_GLOBAL_GAP = 0.12f;
 
     void Start()
     {
@@ -36,11 +26,12 @@ public class NoteSpawner : MonoBehaviour
 
         song.notes.Sort((a, b) => a.time.CompareTo(b.time));
 
-        index = 0;
+        RectTransform lane = lanes[0];
 
-        UpdateTravelTime();
+        float hitY = lane.InverseTransformPoint(hitLine.position).y;
+        float spawnY = lane.rect.height / 2f + spawnOffsetY;
 
-        Debug.Log("TravelTime: " + travelTime);
+        travelTime = (spawnY - hitY) / noteSpeed;
     }
 
     void Update()
@@ -49,22 +40,20 @@ public class NoteSpawner : MonoBehaviour
 
         float current = AudioSync.Instance.SongTime;
 
-        if (current < 0f) return;
-
-        // 🔥 tăng tốc theo thời gian (chỉ ảnh hưởng movement)
-        noteSpeed += speedIncreaseRate * Time.deltaTime;
-        noteSpeed = Mathf.Min(noteSpeed, maxSpeed);
-
-        // 🔥 update lại travelTime theo speed mới
-        UpdateTravelTime();
-
         while (index < song.notes.Count)
         {
-            float spawnTime = song.notes[index].time - travelTime;
+            var data = song.notes[index];
 
-            if (current >= spawnTime)
+            // 🔥 bỏ note đã quá thời gian (tránh spawn lại)
+            if (data.time < current - 0.1f)
             {
-                Spawn(song.notes[index]);
+                index++;
+                continue;
+            }
+
+            if (data.time - current <= travelTime)
+            {
+                Spawn(data);
                 index++;
             }
             else break;
@@ -74,15 +63,6 @@ public class NoteSpawner : MonoBehaviour
     void Spawn(NoteData data)
     {
         int laneIndex = Mathf.Clamp(data.lane, 0, lanes.Length - 1);
-
-        // chống dính global
-        if (Mathf.Abs(data.time - lastSpawnGlobalTime) < MIN_GLOBAL_GAP)
-            return;
-
-        // chống dính lane
-        if (!CanSpawn(laneIndex, data.time))
-            return;
-
         RectTransform lane = lanes[laneIndex];
 
         GameObject obj = NotePool.Instance.Get();
@@ -90,58 +70,14 @@ public class NoteSpawner : MonoBehaviour
 
         rt.SetParent(lane, false);
         rt.localScale = Vector3.one;
-        rt.localRotation = Quaternion.identity;
 
-        // ===== UI chuẩn =====
-        rt.anchorMin = new Vector2(0, 1);
-        rt.anchorMax = new Vector2(1, 1);
-        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
 
-        // 🔥 TÍNH CHIỀU CAO NOTE (TAP / HOLD)
-        float height = noteHeight;
-
-        if (data.duration > 0f)
-        {
-            // 👉 dùng baseSpeed để giữ độ dài ổn định
-            float holdDistance = data.duration * baseSpeed;
-
-            // 👉 tránh quá ngắn hoặc quá dài
-            height = Mathf.Clamp(holdDistance, noteHeight, 1500f);
-        }
-
-        rt.sizeDelta = new Vector2(-20f, height);
-
-        // spawn từ trên
-        rt.anchoredPosition = new Vector2(0, 0);
+        rt.sizeDelta = new Vector2(lane.rect.width - 20f, 350f);
 
         Note note = obj.GetComponent<Note>();
-        note.Init(noteSpeed, data.time, hitLine, laneIndex);
-
-        lastSpawnTime[laneIndex] = data.time;
-        lastSpawnGlobalTime = data.time;
-    }
-
-    bool CanSpawn(int lane, float time)
-    {
-        if (!lastSpawnTime.ContainsKey(lane))
-            return true;
-
-        return Mathf.Abs(time - lastSpawnTime[lane]) >= MIN_LANE_GAP;
-    }
-
-    void UpdateTravelTime()
-    {
-        float spawnY = lanes[0].rect.height;
-        float hitY = GetHitLineLocalY(lanes[0]);
-
-        float distance = Mathf.Abs(spawnY - hitY);
-        travelTime = distance / noteSpeed;
-    }
-
-    float GetHitLineLocalY(RectTransform lane)
-    {
-        Vector3 worldPos = hitLine.position;
-        Vector3 localPos = lane.InverseTransformPoint(worldPos);
-        return localPos.y;
+        note.Init(noteSpeed, data.time, hitLine, data.lane, spawnOffsetY);
     }
 }

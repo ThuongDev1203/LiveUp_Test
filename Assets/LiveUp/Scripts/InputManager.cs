@@ -22,10 +22,14 @@ public class InputManager : MonoBehaviour
 
         foreach (var r in results)
         {
+            Debug.Log("Hit UI: " + r.gameObject.name);
+
             Note note = r.gameObject.GetComponent<Note>();
+
             if (note != null)
             {
                 note.TryHit();
+                //NoteManager.Instance.TryHit();
                 return;
             }
         }

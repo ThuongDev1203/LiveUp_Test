@@ -4,33 +4,37 @@ public class Note : MonoBehaviour
 {
     float speed;
     float targetTime;
-
     bool isHit;
 
+    int laneIndex;
+
     RectTransform rt;
-    RectTransform hitLine;
 
-    int lane;
+    float hitLineY;
+    float spawnY;
 
-    public RectTransform Rect => rt;
-    public RectTransform HitLine => hitLine;
     public float TargetTime => targetTime;
-
-    const float PERFECT = 0.08f;
-    const float GOOD = 0.15f;
+    public int Lane => laneIndex;
 
     void Awake()
     {
         rt = GetComponent<RectTransform>();
     }
 
-    public void Init(float s, float time, RectTransform line, int laneIndex)
+    public void Init(float s, float time, RectTransform hitLine, int lane, float offsetY)
     {
         speed = s;
         targetTime = time;
-        hitLine = line;
-        lane = laneIndex;
+        laneIndex = lane;
+
         isHit = false;
+
+        RectTransform parent = rt.parent as RectTransform;
+
+        hitLineY = parent.InverseTransformPoint(hitLine.position).y;
+        spawnY = parent.rect.height / 2f + offsetY;
+
+        rt.anchoredPosition = new Vector2(0, spawnY);
 
         NoteManager.Instance.Register(this);
     }
@@ -39,14 +43,14 @@ public class Note : MonoBehaviour
     {
         if (isHit) return;
 
-        // MOVE
-        rt.anchoredPosition += Vector2.down * speed * Time.deltaTime;
-
-        // MISS theo TIME (chuẩn rhythm game)
         float current = AudioSync.Instance.SongTime;
-        float delta = current - targetTime;
+        float timeToHit = targetTime - current;
 
-        if (delta > GOOD)
+        float y = hitLineY + timeToHit * speed;
+        rt.anchoredPosition = new Vector2(0, y);
+
+        // MISS
+        if (current - targetTime > 0.3f)
         {
             Miss();
         }
@@ -56,36 +60,45 @@ public class Note : MonoBehaviour
     {
         if (isHit) return;
 
-        var next = NoteManager.Instance.GetNextNote();
+        // 🔥 1. check đúng lane (note dưới cùng)
+        var bottom = NoteManager.Instance.GetBottomNote(laneIndex);
+        if (bottom != this)
+        {
+            Debug.Log("❌ KHÔNG PHẢI NOTE DƯỚI CÙNG LANE");
+            return;
+        }
 
-        // 🔥 CHỈ CHO HIT NOTE SỚM NHẤT TOÀN GAME
-        if (next != this) return;
+        // 🔥 2. check thứ tự global
+        var globalFirst = NoteManager.Instance.GetFirstGlobal();
+        if (globalFirst != this)
+        {
+            Debug.Log("❌ CHƯA ĐẾN LƯỢT NOTE NÀY");
+            return;
+        }
 
         float current = AudioSync.Instance.SongTime;
         float delta = Mathf.Abs(current - targetTime);
 
-        if (delta <= PERFECT)
+        if (delta <= 0.25f)
         {
-            Hit(150);
-        }
-        else if (delta <= GOOD)
-        {
-            Hit(100);
+            Debug.Log("✅ HIT ĐÚNG THỨ TỰ");
+            Hit();
         }
         else
         {
+            Debug.Log("💀 MISS");
             Miss();
         }
     }
 
-    void Hit(int score)
+    void Hit()
     {
+        if (isHit) return;
+
         isHit = true;
 
         NoteManager.Instance.Unregister(this);
-        gameObject.SetActive(false);
-
-        // TODO: add score system here
+        NotePool.Instance.Return(gameObject);
     }
 
     void Miss()
@@ -95,8 +108,11 @@ public class Note : MonoBehaviour
         isHit = true;
 
         NoteManager.Instance.Unregister(this);
-        gameObject.SetActive(false);
+        NotePool.Instance.Return(gameObject);
+    }
 
-        // TODO: add miss effect here
+    void OnDisable()
+    {
+        isHit = false;
     }
 }

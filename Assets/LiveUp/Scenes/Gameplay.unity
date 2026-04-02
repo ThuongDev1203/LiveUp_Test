@@ -406,9 +406,7 @@ MonoBehaviour:
   - {fileID: 1021488717}
   hitLine: {fileID: 1755723304}
   noteSpeed: 800
-  noteHeight: 350
-  speedIncreaseRate: 20
-  maxSpeed: 1400
+  spawnOffsetY: 800
 --- !u!4 &621062769
 Transform:
   m_ObjectHideFlags: 0
@@ -641,7 +639,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_Resource: {fileID: 8300000, guid: 3c0587bba29b1b14ea2452eac1c2472e, type: 3}
+  m_Resource: {fileID: 8300000, guid: 9333389d4a2e51a4a82b5714f3b81def, type: 3}
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1
@@ -986,7 +984,7 @@ Canvas:
   m_OverrideSorting: 0
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
-  m_VertexColorAlwaysGammaSpace: 0
+  m_VertexColorAlwaysGammaSpace: 1
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0

@@ -8,7 +8,7 @@ public class NotePool : MonoBehaviour
     public GameObject notePrefab;
     public int initialSize = 50;
 
-    Queue<GameObject> pool = new Queue<GameObject>();
+    private Queue<GameObject> pool = new Queue<GameObject>();
 
     void Awake()
     {
@@ -24,16 +24,7 @@ public class NotePool : MonoBehaviour
 
     public GameObject Get()
     {
-        GameObject obj;
-
-        if (pool.Count > 0)
-        {
-            obj = pool.Dequeue();
-        }
-        else
-        {
-            obj = Instantiate(notePrefab, transform);
-        }
+        GameObject obj = pool.Count > 0 ? pool.Dequeue() : Instantiate(notePrefab, transform);
 
         obj.SetActive(true);
         return obj;
@@ -42,7 +33,12 @@ public class NotePool : MonoBehaviour
     public void Return(GameObject obj)
     {
         obj.SetActive(false);
+
+        RectTransform rt = obj.GetComponent<RectTransform>();
+        rt.anchoredPosition = Vector2.zero;
+
         obj.transform.SetParent(transform);
+
         pool.Enqueue(obj);
     }
 }
